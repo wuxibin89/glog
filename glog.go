@@ -157,15 +157,27 @@ where the fields are defined as follows:
 	line             The line number
 	msg              The user-supplied message
 */
-func (l *Logger) header(s level, depth int) *buffer {
-	now := time.Now()
+func (l *Logger) header(s level, depth int, now time.Time) *buffer {
 	buf := l.getBuffer()
 
 	// Avoid Fprintf, for speed. The format is so simple that we can do it quickly by hand.
 	// It's worth about 3X. Fprintf is hard.
-	year, month, day := now.Date()
-	hour, minute, second := now.Clock()
-	// Lmmdd hh:mm:ss.uuuuuu threadid file:line]
+	i := 0
+	flag := l.options.Flag
+	if flag&(Ldate|Ltime|Lmicroseconds) != 0 {
+	    if flag&Ldate != 0 {
+		year, month, day := now.Date()
+	    }
+	    if flag&(Ltime|Lmicroseconds) != 0 {
+		hour, min, sec := now.Clock()
+		if flag&Lmicroseconds != 0 {
+		}
+	    }
+	}
+	if flag&Lshortfile != 0 {
+	}
+	if flag&Llevel != 0 {
+	}
 	buf.tmp[0] = levelChar[s]
 	buf.twoDigits(1, int(month))
 	buf.twoDigits(3, day)
@@ -243,99 +255,49 @@ func (buf *buffer) someDigits(i, d int) int {
 }
 
 func (l *Logger) println(s level, args ...interface{}) {
-	buf := l.header(s, 0)
+	now := time.Now()
+	buf := l.header(s, 0, now)
 	fmt.Fprintln(buf, args...)
-	l.output(s, buf)
+	l.output(s, buf, now)
 }
 
 func (l *Logger) print(s level, args ...interface{}) {
-	buf := l.header(s, 0)
+	now := time.Now()
+	buf := l.header(s, 0, now)
 	fmt.Fprint(buf, args...)
 	if buf.Bytes()[buf.Len()-1] != '\n' {
 		buf.WriteByte('\n')
 	}
-	l.output(s, buf)
+	l.output(s, buf, now)
 }
 
 func (l *Logger) printf(s level, format string, args ...interface{}) {
-	buf := l.header(s, 0)
+	now := time.Now()
+	buf := l.header(s, 0, now)
 	fmt.Fprintf(buf, format, args...)
 	if buf.Bytes()[buf.Len()-1] != '\n' {
 		buf.WriteByte('\n')
 	}
-	l.output(s, buf)
+	l.output(s, buf, now)
 }
 
 // output writes the data to the log files and releases the buffer.
-func (l *Logger) output(s level, buf *buffer, file string, line int, alsoToStderr bool) {
+func (l *Logger) output(s level, buf *buffer, now time.Now()) {
 	l.mu.Lock()
-	if l.traceLocation.isSet() {
-		if l.traceLocation.match(file, line) {
-			buf.Write(stacks(false))
-		}
-	}
+	defer l.mu.Unlock()
+
 	data := buf.Bytes()
-	if !flag.Parsed() {
-		os.Stderr.Write([]byte("ERROR: logging before flag.Parse: "))
-		os.Stderr.Write(data)
-	} else if l.toStderr {
-		os.Stderr.Write(data)
-	} else {
-		if alsoToStderr || l.alsoToStderr || s >= l.stderrThreshold.get() {
-			os.Stderr.Write(data)
-		}
-		if l.file[s] == nil {
-			if err := l.createFiles(s); err != nil {
-				os.Stderr.Write(data) // Make sure the message appears somewhere.
-				l.exit(err)
-			}
-		}
-		switch s {
-		case fatalLog:
-			l.file[fatalLog].Write(data)
-			fallthrough
-		case errorLog:
-			l.file[errorLog].Write(data)
-			fallthrough
-		case warningLog:
-			l.file[warningLog].Write(data)
-			fallthrough
-		case infoLog:
-			l.file[infoLog].Write(data)
-		}
-	}
-	if s == fatalLog {
-		// If we got here via Exit rather than Fatal, print no stacks.
-		if atomic.LoadUint32(&fatalNoStacks) > 0 {
-			l.mu.Unlock()
-			timeoutFlush(10 * time.Second)
-			os.Exit(1)
-		}
-		// Dump all goroutine stacks before exiting.
-		// First, make sure we see the trace for the current goroutine on standard error.
-		// If -logtostderr has been specified, the loop below will do that anyway
-		// as the first stack in the full dump.
-		if !l.toStderr {
-			os.Stderr.Write(stacks(false))
-		}
+	l.file.Write(data)
+	if s == Lfatal {
 		// Write the stack trace for all goroutines to the files.
 		trace := stacks(true)
 		logExitFunc = func(error) {} // If we get a write error, we'll still exit below.
-		for log := fatalLog; log >= infoLog; log-- {
-			if f := l.file[log]; f != nil { // Can be nil if -logtostderr is set.
-				f.Write(trace)
-			}
-		}
+		l.file.Write(trace)
 		l.mu.Unlock()
 		timeoutFlush(10 * time.Second)
 		os.Exit(255) // C++ uses -1, which is silly because it's anded with 255 anyway.
 	}
 	l.putBuffer(buf)
-	l.mu.Unlock()
-	if stats := levelStats[s]; stats != nil {
-		atomic.AddInt64(&stats.lines, 1)
-		atomic.AddInt64(&stats.bytes, int64(len(data)))
-	}
 }
 
 // timeoutFlush calls Flush and returns when it completes or after timeout
@@ -444,11 +406,11 @@ func (l *Logger) createFile(now time.Time) error {
 	file = fmt.Sprintf("%s-%04d%02d%02d", options.File, year, month, day)
     case RotateHourly:
 	file = fmt.Sprintf("%s-%04d%02d%02d-%02d", options.File, year, month, day, hour)
-    default:
+    default:	// RotateNone
 	file = options.File
     }
 
-    f, err := os.Create(file)
+    f, err := os.OpenFile(file, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0664)
     if err != nil {
 	return err
     }
