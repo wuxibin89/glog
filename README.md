@@ -27,15 +27,15 @@ The output contents in abc.log will be:
 
     2016/02/16 17:50:07 DEBUG hello world
     2016/02/16 17:50:07 INFO hello, chasex
-    2016/02/16 17:50:07 INFO testing message
+    2016/02/16 17:50:07 WARN testing message
 
 It also support rotating log file by size, hour or day.
 According to rotate mode, log file name has distinct suffix:
 
-    R_None: no suffix, abc.log.
+    R_None: no suffix, just base name, abc.log.
     R_Size: suffix with date and clock, abc.log-YYYYMMDD-HHMMSS.
     R_Hour: suffix with date and hour, abc.log-YYYYMMDD-HH.
-    R_Day: suffix with date, abc.log-YYYYMMDD.
+    R_Day:  suffix with date, abc.log-YYYYMMDD.
 
 Note that it has a daemon routine flushing buffered data to underlying file
 periodically (default every 30s). When exit, remember calling Flush() manually,
