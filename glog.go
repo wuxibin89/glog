@@ -4,7 +4,7 @@
 
 // Package glog implements a simple level logging package based on golang's
 // standard log and glog package. It has fully compatible interface to standard
-// log package. It defines a type, Logger, with methods for formatting output. 
+// log package. It defines a type, Logger, with methods for formatting output.
 // Basic examples:
 //
 //	options := glog.LogOptions{
@@ -21,16 +21,16 @@
 //	logger.Infof("hello, %s", "chasex")
 //	logger.Warn("testing message")
 //	logger.Flush()
-// 
+//
 // The output contents in abc.log will be:
-// 
+//
 //	2016/02/16 17:50:07 DEBUG hello world
 //	2016/02/16 17:50:07 INFO hello, chasex
 //	2016/02/16 17:50:07 WARN testing message
-// 
+//
 // It also support rotating log file by size, hour or day.
 // According to rotate mode, log file name has distinct suffix:
-// 
+//
 //	R_None: no suffix, abc.log.
 //	R_Size: suffix with date and clock, abc.log-YYYYMMDD-HHMMSS.
 //	R_Hour: suffix with date and hour, abc.log-YYYYMMDD-HH.
@@ -82,6 +82,7 @@ const (
 	Lwarn
 	Lerror
 	Lfatal
+	Lpanic
 )
 
 var levelName = []string{
@@ -90,6 +91,7 @@ var levelName = []string{
 	Lwarn:  "WARN",
 	Lerror: "ERROR",
 	Lfatal: "FATAL",
+	Lpanic: "PANIC",
 }
 
 // RotateMode defines log file's rotating mode.
@@ -338,13 +340,15 @@ func (l *Logger) Output(level Level, calldepth int, s string) error {
 	_, err := l.out.Write(b.buf)
 	l.nbytes += uint64(len(b.buf))
 
-	if level == Lfatal {
-		trace := stacks(true)
-		l.out.Write(trace)
+	if level == Lfatal || level == Lpanic {
 		l.out.Flush()
 		l.file.Close()
 		l.mu.Unlock()
-		os.Exit(255)
+
+		if level == Lpanic {
+			panic(s)
+		}
+		os.Exit(1)
 	}
 
 	l.mu.Unlock()
@@ -483,26 +487,32 @@ func (l *Logger) Errorln(v ...interface{}) {
 	}
 }
 
-// Fatalf calls l.Output to print to the logger.
-// Arguments are handled in the manner of fmt.Printf.
-func (l *Logger) Fatalf(format string, v ...interface{}) {
-	if l.options.Level <= Lfatal {
-		l.Output(Lfatal, 3, fmt.Sprintf(format, v...))
-	}
-}
-
-// Fatal calls l.Output to print to the logger.
-// Arguments are handled in the manner of fmt.Print.
+// Fatal is equivalent to l.Print() followed by a call to os.Exit(1).
 func (l *Logger) Fatal(v ...interface{}) {
-	if l.options.Level <= Lfatal {
-		l.Output(Lfatal, 3, fmt.Sprint(v...))
-	}
+	l.Output(Lfatal, 2, fmt.Sprint(v...))
 }
 
-// Fatalln calls l.Output to print to the logger.
-// Arguments are handled in the manner of fmt.Println.
+// Fatalf is equivalent to l.Printf() followed by a call to os.Exit(1).
+func (l *Logger) Fatalf(format string, v ...interface{}) {
+	l.Output(Lfatal, 2, fmt.Sprintf(format, v...))
+}
+
+// Fatalln is equivalent to l.Println() followed by a call to os.Exit(1).
 func (l *Logger) Fatalln(v ...interface{}) {
-	if l.options.Level <= Lfatal {
-		l.Output(Lfatal, 3, fmt.Sprintln(v...))
-	}
+	l.Output(Lfatal, 2, fmt.Sprintln(v...))
+}
+
+// Panic is equivalent to l.Print() followed by a call to panic().
+func (l *Logger) Panic(v ...interface{}) {
+	l.Output(Lpanic, 2, fmt.Sprint(v...))
+}
+
+// Panicf is equivalent to l.Printf() followed by a call to panic().
+func (l *Logger) Panicf(format string, v ...interface{}) {
+	l.Output(Lpanic, 2, fmt.Sprintf(format, v...))
+}
+
+// Panicln is equivalent to l.Println() followed by a call to panic().
+func (l *Logger) Panicln(v ...interface{}) {
+	l.Output(Lpanic, 2, fmt.Sprintln(v...))
 }
