@@ -5,6 +5,7 @@ standard [log](github.com/golang/go/tree/master/src/log)
 and [glog](github.com/golang/glog) package. 
 It has fully compatible interface to standard log package. 
 It defines a type, Logger, with methods for formatting output. 
+
 Basic examples:
 
     options := glog.LogOptions{
