@@ -26,7 +26,7 @@
 // 
 //	2016/02/16 17:50:07 DEBUG hello world
 //	2016/02/16 17:50:07 INFO hello, chasex
-//	2016/02/16 17:50:07 INFO testing message
+//	2016/02/16 17:50:07 WARN testing message
 // 
 // It also support rotating log file by size, hour or day.
 // According to rotate mode, log file name has distinct suffix:

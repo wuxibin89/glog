@@ -1,8 +1,10 @@
 # glog
 
 Package glog implements a simple level logging package based on golang's
-standard log and glog package. It has fully compatible interface to standard
-log package. It defines a type, Logger, with methods for formatting output. 
+standard [log](github.com/golang/go/tree/master/src/log) 
+and [glog](github.com/golang/glog) package. 
+It has fully compatible interface to standard log package. 
+It defines a type, Logger, with methods for formatting output. 
 Basic examples:
 
     options := glog.LogOptions{
@@ -37,3 +39,5 @@ According to rotate mode, log file name has distinct suffix:
 Note that it has a daemon routine flushing buffered data to underlying file
 periodically (default every 30s). When exit, remember calling Flush() manually,
 otherwise it may cause some date loss.
+
+For more details see document: https://godoc.org/github.com/chasex/glog
